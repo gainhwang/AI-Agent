@@ -5,11 +5,16 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 ROOT = Path(__file__).resolve().parent.parent
 app = FastAPI(title="실손의료보험 약관 비교")
+
+MODULES = {
+    "therapy": ("insurance_compare.ai_demo", ["도수치료"]),
+    "deductible": ("insurance_compare.deductible_ai", []),
+}
 
 PAGE = """
 <!doctype html>
@@ -36,6 +41,14 @@ PAGE = """
       margin: 20px 0;
     }
     .muted { color: #607087; }
+    label { display: block; margin-bottom: 10px; font-weight: bold; }
+    select {
+      font: inherit;
+      padding: 10px;
+      border: 1px solid #b9c8d8;
+      border-radius: 8px;
+      margin-right: 10px;
+    }
     button {
       background: #1769aa;
       color: white;
@@ -53,27 +66,44 @@ PAGE = """
       text-align: left;
       vertical-align: top;
       line-height: 1.6;
+      white-space: pre-line;
     }
     th { background: #edf4fa; }
     .notice { background: #fff6df; padding: 12px; border-radius: 8px; }
     #message { min-height: 24px; }
+    details { margin-top: 20px; }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f2f5f8;
+      padding: 14px;
+      border-radius: 8px;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
   <h1>실손의료보험 약관 비교</h1>
-  <p class="muted">약관 원문에서 근거를 찾고, AI가 차이를 설명합니다.</p>
+  <p class="muted">
+    시연용 일반형·간편가입형 PDF에서 근거를 찾고 차이를 비교합니다.
+  </p>
 
   <section class="card">
-    <h2>비교할 약관</h2>
+    <h2>비교 조건</h2>
     <p>일반형: kb_regular_2020.pdf</p>
     <p>간편가입형: kb_simplified_2020.pdf</p>
-    <p><strong>비교 항목:</strong> 비급여 도수치료</p>
+
+    <label for="topic">비교 항목</label>
+    <select id="topic">
+      <option value="therapy">비급여 도수치료</option>
+      <option value="deductible">상해입원 자기부담금</option>
+    </select>
     <button id="compare" type="button">약관 비교하기</button>
     <p id="message" role="status"></p>
   </section>
 
   <section id="result" class="card" hidden>
-    <h2>비교 결과</h2>
+    <h2 id="result-title">비교 결과</h2>
     <table>
       <thead>
         <tr>
@@ -84,7 +114,7 @@ PAGE = """
       </thead>
       <tbody>
         <tr>
-          <th>판단</th>
+          <th>유형·판단</th>
           <td id="regular-status"></td>
           <td id="simplified-status"></td>
         </tr>
@@ -100,17 +130,24 @@ PAGE = """
         </tr>
       </tbody>
     </table>
+
     <h3>차이 요약</h3>
     <p id="comparison"></p>
-    <p id="confirmation" class="notice" hidden>
-      실제 적용 여부는 가입한 특별약관을 확인해야 합니다.
-    </p>
+    <p id="notice" class="notice" hidden></p>
+
+    <details id="evidence-box" hidden>
+      <summary>자기부담금 원문 근거 보기</summary>
+      <pre id="evidence-text"></pre>
+    </details>
   </section>
 
   <script>
+    const topicSelect = document.getElementById("topic");
     const button = document.getElementById("compare");
     const message = document.getElementById("message");
     const resultBox = document.getElementById("result");
+    const notice = document.getElementById("notice");
+    const evidenceBox = document.getElementById("evidence-box");
 
     const statusNames = {
       special_rider: "특별약관 보상 조항",
@@ -120,6 +157,7 @@ PAGE = """
     };
 
     button.addEventListener("click", async () => {
+      const topic = topicSelect.value;
       button.disabled = true;
       resultBox.hidden = true;
       message.textContent = "약관을 비교하고 있습니다…";
@@ -128,7 +166,7 @@ PAGE = """
         const response = await fetch("/compare", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyword: "도수치료" })
+          body: JSON.stringify({ topic })
         });
 
         const data = await response.json();
@@ -136,19 +174,57 @@ PAGE = """
           throw new Error(data.detail || "비교에 실패했습니다.");
         }
 
-        document.getElementById("regular-status").textContent =
-          statusNames[data.regular_status] || data.regular_status;
-        document.getElementById("simplified-status").textContent =
-          statusNames[data.simplified_status] || data.simplified_status;
-        document.getElementById("regular").textContent = data.regular;
-        document.getElementById("simplified").textContent = data.simplified;
+        document.getElementById("result-title").textContent =
+          topic === "therapy"
+            ? "비급여 도수치료 비교"
+            : "상해입원 자기부담금 비교";
+
+        if (topic === "therapy") {
+          document.getElementById("regular-status").textContent =
+            statusNames[data.regular_status] || data.regular_status;
+          document.getElementById("simplified-status").textContent =
+            statusNames[data.simplified_status] || data.simplified_status;
+          document.getElementById("regular").textContent = data.regular;
+          document.getElementById("simplified").textContent = data.simplified;
+
+          notice.hidden = !data.needs_confirmation;
+          notice.textContent =
+            "실제 적용 여부는 가입한 특별약관을 확인해야 합니다.";
+          evidenceBox.hidden = true;
+        } else {
+          document.getElementById("regular-status").textContent =
+            "표준형 / 선택형Ⅱ";
+          document.getElementById("simplified-status").textContent =
+            "유병력자실손 상해입원형";
+          document.getElementById("regular").textContent =
+            data.regular_standard + "\\n\\n" + data.regular_selected;
+          document.getElementById("simplified").textContent =
+            data.simplified;
+
+          notice.hidden = !data.needs_plan_confirmation;
+          notice.textContent =
+            "실제 비교에는 가입한 일반형 유형 확인이 필요합니다.";
+
+          const evidence = data.evidence;
+          document.getElementById("evidence-text").textContent =
+            "일반형 표준형 — PDF " +
+            evidence.regular_standard.page + "쪽\\n" +
+            evidence.regular_standard.text + "\\n\\n" +
+            "일반형 선택형Ⅱ — PDF " +
+            evidence.regular_selected.page + "쪽\\n" +
+            evidence.regular_selected.text + "\\n\\n" +
+            "간편가입형 — PDF " +
+            evidence.simplified.page + "쪽\\n" +
+            evidence.simplified.text;
+          evidenceBox.hidden = false;
+        }
+
         document.getElementById("regular-pages").textContent =
           data.regular_pages.join(", ") + "쪽";
         document.getElementById("simplified-pages").textContent =
           data.simplified_pages.join(", ") + "쪽";
-        document.getElementById("comparison").textContent = data.comparison;
-        document.getElementById("confirmation").hidden =
-          !data.needs_confirmation;
+        document.getElementById("comparison").textContent =
+          data.comparison;
 
         resultBox.hidden = false;
         message.textContent = "";
@@ -165,7 +241,7 @@ PAGE = """
 
 
 class CompareRequest(BaseModel):
-    keyword: str = Field(min_length=1, max_length=30)
+    topic: str
 
 
 @app.get("/")
@@ -175,20 +251,19 @@ def index():
 
 @app.post("/compare")
 def compare(request: CompareRequest):
-    if request.keyword.strip() != "도수치료":
+    selected = MODULES.get(request.topic)
+
+    if selected is None:
         raise HTTPException(
             status_code=400,
-            detail="현재 시연에서는 도수치료 비교만 지원합니다.",
+            detail="지원하지 않는 비교 항목입니다.",
         )
+
+    module, arguments = selected
 
     try:
         process = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "insurance_compare.ai_demo",
-                request.keyword,
-            ],
+            [sys.executable, "-m", module, *arguments],
             cwd=ROOT,
             capture_output=True,
             text=True,
