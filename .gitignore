@@ -3,3 +3,5 @@
 session.db
 __pycache__/
 *.log
+.DS_Store
+data/policies/*.pdf
