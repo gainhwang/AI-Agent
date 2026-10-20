@@ -1,76 +1,73 @@
 import json
 import os
+import sys
 from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
 
-from .pdf_reader import extract_pages
+from .evidence_selector import select_evidence
 
 
 REGULAR_PDF = Path("data/policies/kb_regular_2020.pdf")
 SIMPLIFIED_PDF = Path("data/policies/kb_simplified_2020.pdf")
 
 
-def text_between(text, start, end):
-    start_at = text.find(start)
-    end_at = text.find(end, start_at + len(start))
+def format_evidence(evidence):
+    parts = []
 
-    if start_at < 0 or end_at < 0:
-        raise ValueError(f"약관에서 조항을 찾지 못했습니다: {start}")
+    if evidence["previous_page"] is not None and evidence["previous_context"]:
+        parts.append(
+            f"[{evidence['file']}, PDF {evidence['previous_page']}쪽 — 앞쪽 조항 문맥]\n"
+            f"{evidence['previous_context']}"
+        )
 
-    return text[start_at:end_at].strip()
-
-
-def build_evidence():
-    regular_pages = extract_pages(REGULAR_PDF)
-    simplified_pages = extract_pages(SIMPLIFIED_PDF)
-
-    regular_clause = text_between(
-        regular_pages[76]["text"],
-        "제1장 비급여 실손의료비 특별약관",
-        "제2조(용어의 정의)",
+    parts.append(
+        f"[{evidence['file']}, PDF {evidence['page']}쪽 — 검색된 조항]\n"
+        f"{evidence['snippet']}"
     )
 
-    page_53 = simplified_pages[52]["text"]
-    page_54 = simplified_pages[53]["text"]
+    return "\n\n".join(parts)
 
-    heading_start = page_53.find("제3관 회사가 보상하지 않는 사항")
-    heading_end = page_53.find("(1) 상해입원", heading_start)
-    exclusion_line = "회사는 다음의 입원의료비에 대해서는 보상하지 않습니다."
+
+def allowed_pages(evidence):
+    pages = {evidence["page"]}
+
+    if evidence["previous_page"] is not None:
+        pages.add(evidence["previous_page"])
+
+    return pages
+
+
+def expected_status(evidence):
+    current = evidence["snippet"]
+    previous = evidence["previous_context"]
 
     if (
-        heading_start < 0
-        or heading_end < 0
-        or exclusion_line not in page_53
+        "보상하지 않는 사항" in previous
+        and "보상하지 않습니다" in previous
     ):
-        raise ValueError("간편가입형의 보상 제외 제목을 찾지 못했습니다.")
+        return "excluded"
 
-    heading = page_53[
-        heading_start:heading_end + len("(1) 상해입원")
-    ].strip()
+    if (
+        "보상하지 않는 사항" in current
+        and "보상하지 않습니다" in current
+    ):
+        return "excluded"
 
-    simplified_clause = text_between(
-        page_54,
-        "11. 도수치료",
-        "12. 비급여 주사료",
-    )
+    if "특별약관" in current and "보상하는 내용" in current:
+        return "special_rider"
 
-    regular_evidence = (
-        f"[{REGULAR_PDF.name}, PDF 77쪽]\n{regular_clause}"
-    )
-    simplified_evidence = (
-        f"[{SIMPLIFIED_PDF.name}, PDF 53쪽]\n"
-        f"{heading}\n{exclusion_line}\n\n"
-        f"[{SIMPLIFIED_PDF.name}, PDF 54쪽 — 위 제외 목록의 11호]\n"
-        f"{simplified_clause}"
-    )
-
-    return regular_evidence, simplified_evidence
+    return None
 
 
 def response_format():
-    status_options = ["special_rider", "covered", "excluded", "unclear"]
+    status_options = [
+        "special_rider",
+        "covered",
+        "excluded",
+        "unclear",
+    ]
 
     properties = {
         "regular_status": {
@@ -110,26 +107,7 @@ def response_format():
     }
 
 
-def validate_result(result):
-    if result["regular_status"] != "special_rider":
-        raise RuntimeError("일반형의 특별약관을 잘못 해석했습니다.")
-
-    if result["simplified_status"] != "excluded":
-        raise RuntimeError("간편가입형의 보상 제외 조항을 잘못 해석했습니다.")
-
-    if not result["regular_pages"] or not set(
-        result["regular_pages"]
-    ).issubset({77}):
-        raise RuntimeError("일반형 근거 페이지가 잘못되었습니다.")
-
-    if not result["simplified_pages"] or not set(
-        result["simplified_pages"]
-    ).issubset({53, 54}):
-        raise RuntimeError("간편가입형 근거 페이지가 잘못되었습니다.")
-
-    if result["needs_confirmation"] is not True:
-        raise RuntimeError("특약 가입 확인 필요 여부가 누락되었습니다.")
-
+def validate_result(result, evidence_by_type):
     exclusion_words = (
         "보상하지",
         "보장되지",
@@ -138,33 +116,103 @@ def validate_result(result):
         "제외",
     )
 
-    if not any(word in result["simplified"] for word in exclusion_words):
-        raise RuntimeError("간편가입형 설명에 보상 제외 내용이 없습니다.")
+    for label, evidence in evidence_by_type.items():
+        status = result[f"{label}_status"]
+        cited_pages = result[f"{label}_pages"]
+        expected = expected_status(evidence)
 
-    if not any(word in result["comparison"] for word in exclusion_words):
+        if expected is not None and status != expected:
+            raise RuntimeError(
+                f"{label} 약관의 보장 상태가 근거와 맞지 않습니다."
+            )
+
+        if (
+            not cited_pages
+            or evidence["page"] not in cited_pages
+            or not set(cited_pages).issubset(allowed_pages(evidence))
+        ):
+            raise RuntimeError(
+                f"{label} 약관의 근거 페이지가 실제 검색 결과와 다릅니다."
+            )
+
+        if status == "excluded" and not any(
+            word in result[label] for word in exclusion_words
+        ):
+            raise RuntimeError(
+                f"{label} 설명에 보상 제외 내용이 없습니다."
+            )
+
+    statuses = (
+        result["regular_status"],
+        result["simplified_status"],
+    )
+
+    if "special_rider" in statuses and result["needs_confirmation"] is not True:
+        raise RuntimeError("특별약관 가입 확인 필요 여부가 누락되었습니다.")
+
+    if "excluded" in statuses and not any(
+        word in result["comparison"] for word in exclusion_words
+    ):
         raise RuntimeError("비교 설명에 보상 제외 내용이 없습니다.")
 
 
-def add_confirmation_notice(result):
-    # 현재 도수치료 시연 사례에 한정한 안전 문구
-    if result["regular_status"] == "special_rider":
-        result["regular"] = (
-            "비급여 도수치료 특별약관에 보상 조항이 있습니다. "
-            "실제 적용 여부는 해당 특약 가입 확인이 필요합니다. "
-            f"({REGULAR_PDF.name}, PDF 77쪽)"
+def finalize_result(result, evidence_by_type, keyword):
+    for label, evidence in evidence_by_type.items():
+        if result[f"{label}_status"] == "special_rider":
+            result[label] = (
+                f"{keyword} 관련 특별약관에 보상 조항이 있습니다. "
+                "실제 적용 여부는 해당 특약 가입 확인이 필요합니다. "
+                f"({evidence['file']}, PDF {evidence['page']}쪽)"
+            )
+
+    if (
+        result["regular_status"] == "special_rider"
+        and result["simplified_status"] == "excluded"
+    ):
+        regular = evidence_by_type["regular"]
+        simplified = evidence_by_type["simplified"]
+
+        result["comparison"] = (
+            f"일반형에는 {keyword} 관련 특별약관의 보상 조항이 있으나, "
+            "실제 적용은 해당 특약 가입 확인이 필요합니다. "
+            f"({regular['file']}, PDF {regular['page']}쪽) "
+            f"간편가입형에서는 {keyword} 관련 비급여의료비가 "
+            "보상 제외 항목에 포함됩니다. "
+            f"({simplified['file']}, PDF {simplified['page']}쪽)"
         )
 
     return result
 
 
 def main():
+    keyword = sys.argv[1] if len(sys.argv) > 1 else "도수치료"
+
+    if not keyword.strip():
+        raise RuntimeError("검색어를 입력하세요.")
+
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
 
     if not api_key or api_key == "sk-...":
         raise RuntimeError(".env의 OPENAI_API_KEY를 확인하세요.")
 
-    regular, simplified = build_evidence()
+    evidence_by_type = {
+        "regular": select_evidence(REGULAR_PDF, keyword),
+        "simplified": select_evidence(SIMPLIFIED_PDF, keyword),
+    }
+
+    for label, evidence in evidence_by_type.items():
+        if evidence is None:
+            raise RuntimeError(
+                f"{label} 약관에서 '{keyword}' 근거를 찾지 못했습니다. "
+                "AI 비교를 실행하지 않습니다."
+            )
+
+        pages = sorted(allowed_pages(evidence))
+        print(
+            f"{label} 자동 선택 근거: PDF {pages}쪽",
+            file=sys.stderr,
+        )
 
     response = httpx.post(
         "https://api.openai.com/v1/chat/completions",
@@ -176,21 +224,25 @@ def main():
                     "role": "system",
                     "content": (
                         "너는 보험 약관 비교 보조 에이전트다. "
-                        "제공된 조항만 근거로 답하라. "
+                        "제공된 근거만 사용하고, 없는 내용은 추정하지 마라. "
                         "special_rider는 특별약관의 보상 조항, "
                         "excluded는 보상하지 않는 사항을 뜻한다. "
-                        "특별약관은 실제 가입 여부를 확인해야 한다. "
-                        "보상 제외 목록의 항목을 보장한다고 해석하지 마라. "
+                        "앞쪽 PDF 페이지의 조항 제목이 다음 페이지의 목록에 "
+                        "이어질 수 있으므로 문맥을 함께 읽어라. "
+                        "특별약관에 보상 조항이 있어도 실제 가입 여부는 "
+                        "별도로 확인해야 한다. "
+                        "보상 제외 목록을 보장한다고 해석하지 마라. "
                         "각 설명에 파일명과 PDF 쪽수를 표시하라."
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        "비급여 도수치료를 비교해줘. "
-                        "간편가입형 PDF 53쪽의 제목과 54쪽의 11호는 "
-                        "이어지는 조항이다.\n\n"
-                        f"{regular}\n\n{simplified}"
+                        f"'{keyword}'에 대해 일반형과 간편가입형을 비교해줘.\n\n"
+                        "일반형 근거:\n"
+                        f"{format_evidence(evidence_by_type['regular'])}\n\n"
+                        "간편가입형 근거:\n"
+                        f"{format_evidence(evidence_by_type['simplified'])}"
                     ),
                 },
             ],
@@ -211,8 +263,12 @@ def main():
         raise RuntimeError("AI 답변이 완료되지 않았습니다.")
 
     result = json.loads(message["content"])
-    validate_result(result)
-    result = add_confirmation_notice(result)
+    validate_result(result, evidence_by_type)
+    result = finalize_result(
+        result,
+        evidence_by_type,
+        keyword,
+    )
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
