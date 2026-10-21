@@ -14,6 +14,7 @@ app = FastAPI(title="실손의료보험 약관 비교")
 MODULES = {
     "therapy": ("insurance_compare.ai_demo", ["도수치료"]),
     "deductible": ("insurance_compare.deductible_ai", []),
+    "limit": ("insurance_compare.limit_ai", []),
 }
 
 PAGE = """
@@ -97,6 +98,7 @@ PAGE = """
     <select id="topic">
       <option value="therapy">비급여 도수치료</option>
       <option value="deductible">상해입원 자기부담금</option>
+      <option value="limit">상해입원 보장 한도</option>
     </select>
     <button id="compare" type="button">약관 비교하기</button>
     <p id="message" role="status"></p>
@@ -136,7 +138,7 @@ PAGE = """
     <p id="notice" class="notice" hidden></p>
 
     <details id="evidence-box" hidden>
-      <summary>자기부담금 원문 근거 보기</summary>
+      <summary>약관 원문 근거 보기</summary>
       <pre id="evidence-text"></pre>
     </details>
   </section>
@@ -148,12 +150,19 @@ PAGE = """
     const resultBox = document.getElementById("result");
     const notice = document.getElementById("notice");
     const evidenceBox = document.getElementById("evidence-box");
+    const evidenceText = document.getElementById("evidence-text");
 
     const statusNames = {
       special_rider: "특별약관 보상 조항",
       covered: "보상 조항",
       excluded: "보상 제외",
       unclear: "확인 필요"
+    };
+
+    const titles = {
+      therapy: "비급여 도수치료 비교",
+      deductible: "상해입원 자기부담금 비교",
+      limit: "상해입원 보장 한도 비교"
     };
 
     button.addEventListener("click", async () => {
@@ -174,10 +183,9 @@ PAGE = """
           throw new Error(data.detail || "비교에 실패했습니다.");
         }
 
-        document.getElementById("result-title").textContent =
-          topic === "therapy"
-            ? "비급여 도수치료 비교"
-            : "상해입원 자기부담금 비교";
+        document.getElementById("result-title").textContent = titles[topic];
+        evidenceBox.hidden = true;
+        notice.hidden = true;
 
         if (topic === "therapy") {
           document.getElementById("regular-status").textContent =
@@ -190,8 +198,8 @@ PAGE = """
           notice.hidden = !data.needs_confirmation;
           notice.textContent =
             "실제 적용 여부는 가입한 특별약관을 확인해야 합니다.";
-          evidenceBox.hidden = true;
-        } else {
+
+        } else if (topic === "deductible") {
           document.getElementById("regular-status").textContent =
             "표준형 / 선택형Ⅱ";
           document.getElementById("simplified-status").textContent =
@@ -206,7 +214,7 @@ PAGE = """
             "실제 비교에는 가입한 일반형 유형 확인이 필요합니다.";
 
           const evidence = data.evidence;
-          document.getElementById("evidence-text").textContent =
+          evidenceText.textContent =
             "일반형 표준형 — PDF " +
             evidence.regular_standard.page + "쪽\\n" +
             evidence.regular_standard.text + "\\n\\n" +
@@ -215,6 +223,28 @@ PAGE = """
             evidence.regular_selected.text + "\\n\\n" +
             "간편가입형 — PDF " +
             evidence.simplified.page + "쪽\\n" +
+            evidence.simplified.text;
+          evidenceBox.hidden = false;
+
+        } else if (topic === "limit") {
+          document.getElementById("regular-status").textContent =
+            "계약 시 가입금액 선택";
+          document.getElementById("simplified-status").textContent =
+            "5천만원 한도";
+          document.getElementById("regular").textContent = data.regular;
+          document.getElementById("simplified").textContent = data.simplified;
+
+          notice.hidden = !data.needs_contract_confirmation;
+          notice.textContent =
+            "일반형의 실제 가입금액은 보험증권 확인이 필요합니다.";
+
+          const evidence = data.evidence;
+          evidenceText.textContent =
+            "일반형 — " + evidence.regular.file +
+            ", PDF " + evidence.regular.page + "쪽\\n" +
+            evidence.regular.text + "\\n\\n" +
+            "간편가입형 — " + evidence.simplified.file +
+            ", PDF " + evidence.simplified.page + "쪽\\n" +
             evidence.simplified.text;
           evidenceBox.hidden = false;
         }
