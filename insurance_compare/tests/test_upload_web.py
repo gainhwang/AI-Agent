@@ -124,8 +124,46 @@ class AllUploadTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()["results"]), 4)
+        self.assertEqual(response.json()["workflow"]["retrieval"], "mcp_tool")
         self.assertTrue(all(row["comparison_status"] == "unclear"
                             for row in response.json()["results"]))
+
+
+class PolicyGraphTests(unittest.IsolatedAsyncioTestCase):
+    async def test_specialists_merge_in_topic_order_and_validate_evidence(self):
+        from insurance_compare.generic_evidence import TOPICS
+        from insurance_compare.policy_graph import PolicyDeps, build_graph
+
+        class FakeEvidenceClient:
+            def __init__(self):
+                self.calls = []
+
+            async def retrieve(self, document, topics):
+                self.calls.append((document["file"], topics))
+                return {topic: [] for topic in topics}
+
+        def unsupported_comparison(topic, documents, candidates):
+            return {
+                "left_status": "found", "right_status": "found",
+                "left_claims": [], "right_claims": [],
+                "comparison_status": "same", "comparison": "동일합니다.",
+            }, []
+
+        client = FakeEvidenceClient()
+        graph = build_graph(PolicyDeps(client, comparer=unsupported_comparison))
+        documents = {
+            "left": {"file": "a.pdf", "pages": []},
+            "right": {"file": "b.pdf", "pages": []},
+        }
+        result = await graph.ainvoke({
+            "documents": documents, "topics": list(TOPICS), "results": []
+        })
+        self.assertEqual(len(client.calls), 2)
+        self.assertEqual([item["key"] for item in result["output"]["results"]], list(TOPICS))
+        self.assertTrue(all(
+            item["comparison_status"] == "unclear"
+            for item in result["output"]["results"]
+        ))
 
 
 if __name__ == "__main__":

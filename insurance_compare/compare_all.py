@@ -1,44 +1,71 @@
-"""Compare all four topics after extracting each uploaded PDF once."""
+"""Compare policy topics through the LangGraph and MCP evidence workflow."""
+import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
-from .generic_compare import build_output, compare_documents
-from .generic_evidence import TOPICS, find_candidates
+from dotenv import load_dotenv
+
+# The base project may enable LangSmith in .env. Policy documents can include
+# sensitive health data, so turn tracing off before importing graph/trace code
+# unless this workflow was explicitly opted in for public demo PDFs.
+load_dotenv()
+POLICY_TRACING_ENABLED = os.getenv("POLICY_LANGSMITH_TRACING") == "1"
+if not POLICY_TRACING_ENABLED:
+    os.environ["LANGSMITH_TRACING"] = "false"
+    os.environ["LANGCHAIN_TRACING_V2"] = "false"
+
+from langsmith import tracing_context
+
+from .generic_evidence import TOPICS
 from .pdf_input import load_pdf
-from .scoped_rules import unclear
+from .policy_graph import PolicyDeps, build_graph
+from .policy_mcp_client import PolicyEvidenceClient
 
 
-def compare_all(documents):
-    results = []
-    for topic in TOPICS:
-        candidates = {
-            side: find_candidates(document, topic)
-            for side, document in documents.items()
-        }
-        try:
-            checked, notes = compare_documents(topic, documents, candidates)
-        except Exception:
-            # A failed model request must not be mistaken for a policy finding.
-            checked, notes = unclear(
-                "이 항목의 AI 비교를 완료하지 못했습니다. 원문을 확인하세요."
-            )
-        results.append({"key": topic, **build_output(topic, documents, checked, notes)})
-    return {
-        "first_file": documents["left"]["file"],
-        "second_file": documents["right"]["file"],
-        "results": results,
-    }
+async def compare_async(documents, topics):
+    async with PolicyEvidenceClient() as evidence_client:
+        graph = build_graph(PolicyDeps(evidence_client=evidence_client))
+        # PDF text contains potentially sensitive health information. Tracing
+        # stays off unless the presenter explicitly opts in with demo PDFs.
+        with tracing_context(enabled=POLICY_TRACING_ENABLED):
+            state = await graph.ainvoke({
+                "documents": documents,
+                "topics": topics,
+                "results": [],
+            })
+        return state["output"]
+
+
+def compare_all(documents, topics=None):
+    chosen = list(TOPICS) if topics is None else list(topics)
+    if not chosen or any(topic not in TOPICS for topic in chosen):
+        raise ValueError("지원하지 않는 비교 항목입니다.")
+    return asyncio.run(compare_async(documents, chosen))
 
 
 def main():
-    if len(sys.argv) != 3:
-        raise SystemExit("사용법: python -m insurance_compare.compare_all 첫번째.pdf 두번째.pdf")
+    args = sys.argv[1:]
+    if len(args) == 4 and args[0] == "--topic" and args[1] in TOPICS:
+        topics = [args[1]]
+        filenames = args[2:]
+    elif len(args) == 2:
+        topics = list(TOPICS)
+        filenames = args
+    else:
+        raise SystemExit(
+            "사용법: python -m insurance_compare.compare_all "
+            "[--topic therapy|deductible|limit|exclusion] 첫번째.pdf 두번째.pdf"
+        )
     documents = {
         side: load_pdf(Path(filename).name, Path(filename).read_bytes())
-        for side, filename in zip(("left", "right"), sys.argv[1:])
+        for side, filename in zip(("left", "right"), filenames)
     }
-    print(json.dumps(compare_all(documents), ensure_ascii=False, indent=2))
+    output = compare_all(documents, topics)
+    if len(topics) == 1:
+        output = output["results"][0]
+    print(json.dumps(output, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

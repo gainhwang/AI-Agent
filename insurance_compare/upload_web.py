@@ -78,9 +78,8 @@ def compare_upload(
                 [
                     sys.executable,
                     "-m",
-                    ("insurance_compare.compare_all" if topic == "all"
-                     else "insurance_compare.generic_compare"),
-                    *([] if topic == "all" else [topic]),
+                    "insurance_compare.compare_all",
+                    *([] if topic == "all" else ["--topic", topic]),
                     str(first_path),
                     str(second_path),
                 ],
