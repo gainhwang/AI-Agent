@@ -20,6 +20,7 @@ TOPIC_QUESTIONS = {
 }
 SOURCE_PREFIX = {"left": "L", "right": "R"}
 COVERAGE_TYPES = ("상해급여", "상해비급여")
+THERAPY_FIELDS = ("fixed", "percent", "amount", "visits", "initial", "step")
 NUMBER_PATTERN = re.compile(r"\d[\d,.]*(?:천|만|억)*(?:원|%|회|일|년)?")
 AMOUNT_PATTERN = re.compile(r"\d[\d,.]*(?:천|만|억)*원")
 
@@ -84,20 +85,39 @@ def therapy_details(source):
     """표의 공제금액과 보장한도가 모두 확인될 때만 값을 추출한다."""
     text = canonical(source["snippet"])
     title = "도수치료·체외충격파치료·증식치료"
-    start = text.find(title)
-    end = text.find("주사료", start)
-    if "공제금액및보장한도" not in text or start < 0 or end < 0:
+    if title not in text:
         return None
 
-    row = text[start:end]
+    if "공제금액및보장한도" in text:
+        # 신형 표: 도수치료 행에서 다음 주사료 행 직전까지만 읽는다.
+        heading = text.find("공제금액및보장한도")
+        start = text.find(title, heading)
+        end = text.find("주사료", start)
+        if start < 0 or end < 0:
+            return None
+        row = text[start:end]
+    else:
+        # 구형 표: 보상대상의료비 / 공제금액 / 보상한도가 세로로 놓인다.
+        start = text.find("공제금액1회당")
+        if start < 0:
+            return None
+        section = text.rfind("보상대상의료비", 0, start)
+        if section < 0 or title not in text[section:start]:
+            return None
+        end = text.find("용어풀이", start)
+        row = text[start:end if end >= 0 else None]
+        if "보상한도" not in row:
+            return None
+
     deduction = re.search(
         r"1회당(?P<fixed>\d[\d,.]*(?:천|만|억)*원)"
-        r"과보장대상의료비의(?P<percent>\d+)%중큰금액",
+        r"과(?P<base>보장대상의료비|보상대상의료비)의"
+        r"(?P<percent>\d+)%중큰금액",
         row,
     )
     coverage = re.search(
         r"(?P<amount>\d[\d,.]*(?:천|만|억)*원)"
-        r"이내에서(?P<visits>\d+)회까지보상",
+        r"이내에서(?P<visits>\d+)회(?:주\))?까지보상",
         row,
     )
     if deduction is None or coverage is None:
@@ -113,6 +133,7 @@ def therapy_details(source):
 
     return {
         "fixed": deduction.group("fixed"),
+        "base": deduction.group("base"),
         "percent": deduction.group("percent"),
         "amount": coverage.group("amount"),
         "visits": coverage.group("visits"),
@@ -124,7 +145,7 @@ def therapy_details(source):
 def therapy_fact(details):
     fact = (
         "도수치료·체외충격파치료·증식치료 합산: "
-        f"1회 공제금액은 {details['fixed']}과 보장대상의료비의 "
+        f"1회 공제금액은 {details['fixed']}과 {details['base']}의 "
         f"{details['percent']}% 중 큰 금액입니다. "
         f"1년 단위 보장한도는 {details['amount']} 이내, "
         f"{details['visits']}회까지입니다."
@@ -139,7 +160,7 @@ def therapy_fact(details):
 
 
 def therapy_comparison(left, right):
-    if left != right:
+    if any(left[key] != right[key] for key in THERAPY_FIELDS):
         return (
             "different",
             "선택된 근거의 공제금액 또는 보장한도 조건이 다릅니다. "
@@ -150,7 +171,7 @@ def therapy_comparison(left, right):
 
     comparison = (
         "두 PDF의 해당 특별약관에서 공제금액은 1회당 "
-        f"{left['fixed']}과 보장대상의료비의 {left['percent']}% 중 "
+        f"{left['fixed']}과 {left['base']}의 {left['percent']}% 중 "
         "큰 금액, 도수치료·체외충격파치료·증식치료 합산 "
         f"보장한도는 1년 단위 {left['amount']} 이내·"
         f"{left['visits']}회까지로 동일하게 기재되어 있습니다. "
@@ -380,7 +401,10 @@ def extracted_therapy_result(candidates):
         ]
         if not matches:
             return None
-        if any(details != matches[0][1] for _, details in matches[1:]):
+        if any(
+            any(details[key] != matches[0][1][key] for key in THERAPY_FIELDS)
+            for _, details in matches[1:]
+        ):
             return {
                 "left_status": "unclear",
                 "right_status": "unclear",

@@ -115,8 +115,10 @@ def find_candidates(document, topic, max_results=3):
         )
         position = text.find(focus) if focus else 0
 
+        # 구형 약관은 도수치료 공제금액과 보장한도가 표의 뒤쪽에 있다.
+        context_after = 1800 if topic == "therapy" else 900
         snippet = text[
-            max(0, position - 220):position + 900
+            max(0, position - 220):position + context_after
         ]
 
         candidates.append({
