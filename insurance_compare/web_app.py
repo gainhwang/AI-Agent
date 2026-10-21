@@ -15,6 +15,7 @@ MODULES = {
     "therapy": ("insurance_compare.ai_demo", ["도수치료"]),
     "deductible": ("insurance_compare.deductible_ai", []),
     "limit": ("insurance_compare.limit_ai", []),
+    "exclusion": ("insurance_compare.exclusion_ai", []),
 }
 
 PAGE = """
@@ -99,6 +100,7 @@ PAGE = """
       <option value="therapy">비급여 도수치료</option>
       <option value="deductible">상해입원 자기부담금</option>
       <option value="limit">상해입원 보장 한도</option>
+      <option value="exclusion">상해입원 면책 사항</option>
     </select>
     <button id="compare" type="button">약관 비교하기</button>
     <p id="message" role="status"></p>
@@ -162,7 +164,8 @@ PAGE = """
     const titles = {
       therapy: "비급여 도수치료 비교",
       deductible: "상해입원 자기부담금 비교",
-      limit: "상해입원 보장 한도 비교"
+      limit: "상해입원 보장 한도 비교",
+      exclusion: "상해입원 면책 사항 비교"
     };
 
     button.addEventListener("click", async () => {
@@ -237,6 +240,28 @@ PAGE = """
           notice.hidden = !data.needs_contract_confirmation;
           notice.textContent =
             "일반형의 실제 가입금액은 보험증권 확인이 필요합니다.";
+
+          const evidence = data.evidence;
+          evidenceText.textContent =
+            "일반형 — " + evidence.regular.file +
+            ", PDF " + evidence.regular.page + "쪽\\n" +
+            evidence.regular.text + "\\n\\n" +
+            "간편가입형 — " + evidence.simplified.file +
+            ", PDF " + evidence.simplified.page + "쪽\\n" +
+            evidence.simplified.text;
+          evidenceBox.hidden = false;
+
+        } else if (topic === "exclusion") {
+          document.getElementById("regular-status").textContent =
+            "보상 제외·예외 있음";
+          document.getElementById("simplified-status").textContent =
+            "보상 제외·예외 있음";
+          document.getElementById("regular").textContent = data.regular;
+          document.getElementById("simplified").textContent = data.simplified;
+
+          notice.hidden = !data.needs_case_confirmation;
+          notice.textContent =
+            "예외 적용 여부는 실제 입원 원인과 약관 조건 확인이 필요합니다.";
 
           const evidence = data.evidence;
           evidenceText.textContent =
