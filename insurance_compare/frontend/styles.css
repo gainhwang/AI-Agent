@@ -1,0 +1,19 @@
+body { font-family: sans-serif; max-width: 900px; margin: 40px auto;
+           padding: 0 18px; color: #243247; background: #f6f8fb; }
+    .card { background: white; border: 1px solid #dce4ee; border-radius: 12px;
+            padding: 24px; margin: 20px 0; }
+    label { display: block; margin: 16px 0 6px; font-weight: bold; }
+    input, select, button { font: inherit; }
+    input[type=file], select { width: 100%; max-width: 620px; padding: 10px;
+                               border: 1px solid #b9c8d8; border-radius: 8px; }
+    button { margin-top: 20px; padding: 12px 18px; border: 0; border-radius: 8px;
+             color: white; background: #1769aa; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #dce4ee; padding: 12px; text-align: left;
+             vertical-align: top; line-height: 1.6; white-space: pre-line; }
+    th { background: #edf4fa; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f2f5f8;
+          padding: 12px; border-radius: 8px; line-height: 1.6; }
+    .muted { color: #607087; }
+    .notice { background: #fff6df; padding: 12px; border-radius: 8px; }

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>실손의료보험 PDF 비교</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <h1>실손의료보험 PDF 비교</h1>
+  <p class="muted">텍스트를 추출할 수 있는 실손약관 PDF 두 개를 선택하세요.</p>
+
+  <section class="card">
+    <form id="compare-form">
+      <label for="first">첫 번째 약관 PDF</label>
+      <input id="first" name="first" type="file"
+             accept=".pdf,application/pdf" required>
+
+      <label for="second">두 번째 약관 PDF</label>
+      <input id="second" name="second" type="file"
+             accept=".pdf,application/pdf" required>
+
+      <label for="topic">비교 항목</label>
+      <select id="topic" name="topic">
+        <option value="therapy">비급여 도수치료</option>
+        <option value="deductible">상해입원 자기부담금</option>
+        <option value="limit">상해입원 보장 한도</option>
+        <option value="exclusion">임신·출산 관련 면책 사항</option>
+      </select>
+
+      <button id="submit" type="submit">PDF 비교하기</button>
+      <p id="message" role="status"></p>
+    </form>
+  </section>
+
+  <section id="result" class="card" hidden>
+    <h2 id="title">비교 결과</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>첫 번째 PDF</th>
+          <th>두 번째 PDF</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td id="left-summary"></td>
+          <td id="right-summary"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>차이 요약</h3>
+    <p id="comparison"></p>
+    <p class="notice">
+      PDF 원문을 바탕으로 자동 생성한 비교입니다. 아래 근거와 실제 가입 내용을 확인하세요.
+    </p>
+
+    <details>
+      <summary>인용 근거 및 검증 결과 보기</summary>
+      <pre id="evidence"></pre>
+    </details>
+  </section>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
