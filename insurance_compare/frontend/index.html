@@ -3,45 +3,104 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>실손의료보험 PDF 비교</title>
+  <meta name="theme-color" content="#122541">
+  <title>실손의료보험 약관 비교</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-  <main>
-    <h1>실손의료보험 PDF 비교</h1>
-    <p class="muted">약관 PDF 두 개를 올리면 보상·자기부담금·한도·면책 조항을 근거와 함께 비교합니다.</p>
-
-    <section class="card" aria-label="비교 조건">
-      <form id="compare-form">
-        <label for="first">첫 번째 약관 PDF</label>
-        <input id="first" name="first" type="file" accept=".pdf,application/pdf" required>
-        <label for="second">두 번째 약관 PDF</label>
-        <input id="second" name="second" type="file" accept=".pdf,application/pdf" required>
-        <label for="topic">비교 항목</label>
-        <select id="topic" name="topic">
-          <option value="all">전체 4개 항목</option>
-          <option value="therapy">비급여 도수치료</option>
-          <option value="deductible">상해입원 자기부담금</option>
-          <option value="limit">상해입원 보장 한도</option>
-          <option value="exclusion">임신·출산 관련 면책 사항</option>
-        </select>
-        <button id="submit" type="submit">PDF 비교하기</button>
-        <p id="message" role="status" aria-live="polite"></p>
-      </form>
-    </section>
-
-    <section id="result" class="card" hidden>
-      <h2>약관 비교 결과</h2>
-      <p id="file-names" class="muted"></p>
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>비교 항목</th><th>첫 번째 PDF</th><th>두 번째 PDF</th><th>차이 요약</th></tr></thead>
-          <tbody id="result-rows"></tbody>
-        </table>
+  <div class="app-shell">
+    <header class="topbar" aria-label="서비스 정보">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">≋</span>
+        <span>실손약관 비교</span>
       </div>
-      <p class="notice">PDF 원문을 바탕으로 자동 생성한 비교입니다. 각 행의 근거와 실제 가입 내용을 확인하세요. 서로 다른 보장 유형은 직접 비교를 보류합니다.</p>
-    </section>
-  </main>
+      <span class="topbar-caption">PDF 원문 근거로 비교하는 보조 도구</span>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> 실손의료보험 약관 비교</p>
+          <h1 id="hero-title">두 약관의 차이,<br>근거까지 한눈에</h1>
+          <p class="hero-description">실손약관 PDF 두 개를 올리면 보상 내용과 자기부담금, 한도, 면책 조항을 같은 기준으로 비교합니다.</p>
+          <div class="hero-metrics" aria-label="서비스 요약">
+            <span><strong>2</strong>개 PDF</span>
+            <span><strong>4</strong>개 비교 항목</span>
+            <span>쪽수별 원문 근거</span>
+          </div>
+        </div>
+        <div class="hero-aside" aria-label="비교 항목 안내">
+          <p class="aside-label">비교 항목</p>
+          <ol>
+            <li><span>01</span> 비급여 도수치료</li>
+            <li><span>02</span> 상해입원 자기부담금</li>
+            <li><span>03</span> 상해입원 보장 한도</li>
+            <li><span>04</span> 임신·출산 관련 면책</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="workbench" aria-labelledby="upload-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">COMPARE POLICIES</p>
+            <h2 id="upload-title">비교할 약관을 선택하세요</h2>
+          </div>
+          <p>텍스트를 추출할 수 있는 PDF를 사용해 주세요.</p>
+        </div>
+
+        <form id="compare-form">
+          <div class="upload-grid">
+            <div class="upload-card">
+              <div class="upload-card-heading"><span class="file-number">01</span><label for="first">첫 번째 약관 PDF</label></div>
+              <input id="first" name="first" type="file" accept=".pdf,application/pdf" required>
+              <p class="selected-file" id="first-name">PDF 파일만 · 최대 25MB</p>
+            </div>
+            <div class="upload-card">
+              <div class="upload-card-heading"><span class="file-number">02</span><label for="second">두 번째 약관 PDF</label></div>
+              <input id="second" name="second" type="file" accept=".pdf,application/pdf" required>
+              <p class="selected-file" id="second-name">PDF 파일만 · 최대 25MB</p>
+            </div>
+          </div>
+
+          <div class="action-row">
+            <div class="topic-field">
+              <label for="topic">비교 범위</label>
+              <select id="topic" name="topic">
+                <option value="all">전체 4개 항목</option>
+                <option value="therapy">비급여 도수치료</option>
+                <option value="deductible">상해입원 자기부담금</option>
+                <option value="limit">상해입원 보장 한도</option>
+                <option value="exclusion">임신·출산 관련 면책 사항</option>
+              </select>
+            </div>
+            <button id="submit" type="submit"><span class="button-text">약관 비교하기</span><span class="button-arrow" aria-hidden="true">↗</span></button>
+          </div>
+          <p id="message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section id="result" class="result-section" aria-labelledby="result-title" hidden>
+        <div class="result-header">
+          <div>
+            <p class="section-kicker">COMPARISON RESULT</p>
+            <h2 id="result-title">약관 비교 결과</h2>
+            <p id="file-names" class="result-files"></p>
+          </div>
+          <div id="result-stats" class="result-stats" aria-label="비교 상태 요약"></div>
+        </div>
+        <div class="result-table-wrap">
+          <table>
+            <thead><tr><th>비교 항목</th><th>첫 번째 PDF</th><th>두 번째 PDF</th><th>차이 요약</th></tr></thead>
+            <tbody id="result-rows"></tbody>
+          </table>
+        </div>
+        <p class="notice"><strong>확인해 주세요.</strong> 이 결과는 PDF 약관 문구의 자동 비교입니다. 펼쳐진 원문 근거와 실제 가입 특약·보험증권을 함께 확인해야 합니다.</p>
+      </section>
+    </main>
+
+    <footer>실손의료보험 약관 비교 보조 도구 · 실제 보장 여부는 가입 내용에 따라 달라집니다.</footer>
+  </div>
   <script src="/static/app.js" defer></script>
 </body>
 </html>
