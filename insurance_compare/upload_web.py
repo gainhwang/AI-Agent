@@ -52,7 +52,7 @@ def compare_upload(
     first: UploadFile = File(...),
     second: UploadFile = File(...),
 ):
-    if topic not in TOPICS:
+    if topic != "all" and topic not in TOPICS:
         raise HTTPException(
             status_code=400,
             detail="지원하지 않는 비교 항목입니다.",
@@ -78,15 +78,16 @@ def compare_upload(
                 [
                     sys.executable,
                     "-m",
-                    "insurance_compare.generic_compare",
-                    topic,
+                    ("insurance_compare.compare_all" if topic == "all"
+                     else "insurance_compare.generic_compare"),
+                    *([] if topic == "all" else [topic]),
                     str(first_path),
                     str(second_path),
                 ],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=300 if topic == "all" else 120,
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:

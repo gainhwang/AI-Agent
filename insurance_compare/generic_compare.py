@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from .generic_evidence import TOPICS, find_candidates
 from .pdf_input import load_pdf
+from .scoped_rules import compare_scoped, compare_old_limit, compare_old_therapy, unclear
 
 
 TOPIC_QUESTIONS = {
@@ -390,13 +391,18 @@ def verify_result(result, candidates, topic):
     return checked, notes
 
 
-def extracted_therapy_result(candidates):
+def extracted_therapy_result(candidates, documents=None):
     """표를 읽을 수 있으면 AI 요약 대신 검증된 표의 값으로 비교한다."""
     selected = {}
     for side in ("left", "right"):
+        rows = (
+            [{"page": page["page"], "snippet": page["text"]}
+             for page in documents[side]["pages"]]
+            if documents is not None else candidates[side]
+        )
         matches = [
             (row, details)
-            for row in candidates[side]
+            for row in rows
             if (details := therapy_details(row)) is not None
         ]
         if not matches:
@@ -506,15 +512,27 @@ def build_output(topic, documents, result, notes=None):
 
 
 def compare_documents(topic, documents, candidates):
+    if topic in ("deductible", "exclusion"):
+        return compare_scoped(topic, documents)
+
+    if not candidates["left"] or not candidates["right"]:
+        return unclear("양쪽 PDF에서 같은 항목의 근거를 찾지 못했습니다.")
+
     if topic == "therapy":
-        extracted = extracted_therapy_result(candidates)
+        extracted = extracted_therapy_result(candidates, documents)
         if extracted is not None:
             return extracted
+        old = compare_old_therapy(documents)
+        if old is not None:
+            return old
 
     if topic == "limit":
         extracted = extracted_limit_result(candidates)
         if extracted is not None:
             return extracted
+        old = compare_old_limit(documents)
+        if old is not None:
+            return old
 
     if not candidates["left"] and not candidates["right"]:
         return {

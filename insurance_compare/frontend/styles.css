@@ -1,19 +1,44 @@
-body { font-family: sans-serif; max-width: 900px; margin: 40px auto;
-           padding: 0 18px; color: #243247; background: #f6f8fb; }
-    .card { background: white; border: 1px solid #dce4ee; border-radius: 12px;
-            padding: 24px; margin: 20px 0; }
-    label { display: block; margin: 16px 0 6px; font-weight: bold; }
-    input, select, button { font: inherit; }
-    input[type=file], select { width: 100%; max-width: 620px; padding: 10px;
-                               border: 1px solid #b9c8d8; border-radius: 8px; }
-    button { margin-top: 20px; padding: 12px 18px; border: 0; border-radius: 8px;
-             color: white; background: #1769aa; cursor: pointer; }
-    button:disabled { opacity: .6; cursor: wait; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    th, td { border: 1px solid #dce4ee; padding: 12px; text-align: left;
-             vertical-align: top; line-height: 1.6; white-space: pre-line; }
-    th { background: #edf4fa; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f2f5f8;
-          padding: 12px; border-radius: 8px; line-height: 1.6; }
-    .muted { color: #607087; }
-    .notice { background: #fff6df; padding: 12px; border-radius: 8px; }
+:root { color-scheme: light; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif;
+  max-width: 1180px; margin: 40px auto; padding: 0 18px; color: #243247;
+  background: #f6f8fb; }
+h1 { margin-bottom: 8px; }
+.card { background: white; border: 1px solid #dce4ee; border-radius: 12px;
+  padding: 24px; margin: 20px 0; }
+label { display: block; margin: 16px 0 6px; font-weight: 700; }
+input, select, button { font: inherit; }
+input[type=file], select { width: 100%; max-width: 620px; box-sizing: border-box;
+  padding: 10px; border: 1px solid #b9c8d8; border-radius: 8px; }
+button { margin-top: 20px; padding: 12px 18px; border: 0; border-radius: 8px;
+  color: white; background: #1769aa; cursor: pointer; }
+button:disabled { opacity: .6; cursor: wait; }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; min-width: 850px; border-collapse: collapse; margin-top: 16px; }
+th, td { border: 1px solid #dce4ee; padding: 12px; text-align: left;
+  vertical-align: top; line-height: 1.6; white-space: pre-line; }
+th { background: #edf4fa; }
+th:first-child { width: 18%; }
+.comparison { font-weight: 600; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f2f5f8;
+  padding: 12px; border-radius: 8px; line-height: 1.6; font-weight: 400; }
+summary { cursor: pointer; font-weight: 600; }
+.muted { color: #607087; }
+.notice { background: #fff6df; padding: 12px; border-radius: 8px; }
+@media (max-width: 700px) {
+  body { margin: 22px auto; }
+  .card { padding: 18px; }
+  table { min-width: 0; }
+  thead { display: none; }
+  tbody tr { display: block; }
+  tbody tr:nth-child(odd) { border: 1px solid #dce4ee; border-radius: 8px 8px 0 0;
+    overflow: hidden; }
+  tbody tr:nth-child(odd) td { display: block; border: 0; border-bottom: 1px solid #edf1f6; }
+  tbody tr:nth-child(odd) td::before { display: block; font-weight: 700;
+    color: #607087; margin-bottom: 4px; }
+  tbody tr:nth-child(odd) td:nth-child(1)::before { content: '항목'; }
+  tbody tr:nth-child(odd) td:nth-child(2)::before { content: '첫 번째 PDF'; }
+  tbody tr:nth-child(odd) td:nth-child(3)::before { content: '두 번째 PDF'; }
+  tbody tr:nth-child(odd) td:nth-child(4)::before { content: '차이 요약'; }
+  tbody tr:nth-child(even) { margin-bottom: 20px; }
+  tbody tr:nth-child(even) td { display: block; border-top: 0; }
+}

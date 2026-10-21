@@ -77,5 +77,56 @@ class UploadWebTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class ComparisonRulesTests(unittest.TestCase):
+    def test_all_topics_with_no_evidence_are_unclear(self):
+        from insurance_compare.compare_all import compare_all
+        document = {"file": "plain.pdf", "pages": [{"page": 1, "text": "No policy clauses here"}]}
+        output = compare_all({"left": document, "right": document})
+        self.assertEqual(len(output["results"]), 4)
+        self.assertTrue(all(item["comparison_status"] == "unclear" for item in output["results"]))
+
+    def test_one_sided_evidence_stays_unclear(self):
+        from insurance_compare.generic_compare import compare_documents
+        documents = {"left": {"file": "a.pdf"}, "right": {"file": "b.pdf"}}
+        candidates = {"left": [{"page": 1, "snippet": "도수치료", "file": "a.pdf"}], "right": []}
+        result, _ = compare_documents("therapy", documents, candidates)
+        self.assertEqual(result["comparison_status"], "unclear")
+
+    def test_scoped_deductible_does_not_use_outpatient_row(self):
+        from insurance_compare.scoped_rules import deductible
+        document = {"file": "sample.pdf", "pages": [{"page": 9, "text":
+            "자기부담금을 차감하는 담보 표준형 상해입원실손의료비 "
+            "입원수술비: 보상대상의료비의 20%에 해당하는 금액 "
+            "상해통원(외래) 2만원과 보상대상의료비의 30%중 큰 금액"}]}
+        found = deductible(document)
+        self.assertIn("20%", found["summary"])
+        self.assertNotIn("30%", found["summary"])
+
+    def test_exclusion_requires_injury_exception(self):
+        from insurance_compare.scoped_rules import exclusion
+        document = {"file": "sample.pdf", "pages": [{"page": 1, "text":
+            "(1)상해입원 4.피보험자가 임신,출산,산후기로 입원한 경우. "
+            "5.전쟁"}]}
+        self.assertIsNone(exclusion(document))
+
+
+class AllUploadTests(unittest.TestCase):
+    def test_one_upload_returns_four_rows(self):
+        client = TestClient(app)
+        pdf = text_pdf("No policy clauses here")
+        response = client.post(
+            "/compare-upload",
+            data={"topic": "all"},
+            files={
+                "first": ("first.pdf", pdf, "application/pdf"),
+                "second": ("second.pdf", pdf, "application/pdf"),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["results"]), 4)
+        self.assertTrue(all(row["comparison_status"] == "unclear"
+                            for row in response.json()["results"]))
+
+
 if __name__ == "__main__":
     unittest.main()
